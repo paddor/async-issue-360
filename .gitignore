@@ -1,0 +1,4 @@
+/.bundle/
+/*.snap
+/*.tar.gz
+/vendor/

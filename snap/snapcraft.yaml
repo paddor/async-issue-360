@@ -1,0 +1,204 @@
+name: async-issue-360
+# base: core20
+base: core22
+version: '0.1.0'
+summary: Reproduction for socetry/async#360
+description: |
+  Reproduction for socetry/async#360
+
+grade: stable
+confinement: strict
+
+
+parts:
+  ruby-install:
+    plugin: make
+    source: https://github.com/postmodern/ruby-install/archive/refs/tags/v0.9.3.tar.gz
+    source-checksum: sha256/3e920c9c770ce040cdf71cc64b809e861b613c570c6113ee61ab1d2885a16ab3
+    prime:
+      - -*
+
+
+  ruby:
+    after:
+      - ruby-install
+    plugin: nil
+    # build-packages:
+      # - ccache
+    # build-environment:
+      # - CCACHE_NOHASHDIR: "true"
+      # - CC: "ccache cc"
+      # - CXX: "ccache c++"
+      # - CFLAGS: "-Os"
+      # - CFLAGS: "-O2"
+    override-build: |
+      /root/stage/usr/local/bin/ruby-install \
+        --src-dir ${SNAPCRAFT_PART_SRC} \
+        --install-dir ${SNAPCRAFT_PART_INSTALL}/usr \
+        --jobs=${SNAPCRAFT_PARALLEL_BUILD_COUNT} \
+        --no-reinstall \
+        ruby 3.3 \
+        -- \
+        --enable-shared \
+        --without-baseruby \
+        --enable-load-relative \
+        --disable-install-doc 
+
+      ${SNAPCRAFT_PART_INSTALL}/usr/bin/gem update --system --no-document
+
+      # NOTE: Update bundler and avoid conflicts/prompts about replacing bundler
+      #       executables by removing them first.
+      # command -v bundle && rm -f $(command -v bundle)
+      # command -v bundler && rm -f $(command -v bundler)
+      ${SNAPCRAFT_PART_INSTALL}/usr/bin/gem install --env-shebang --no-document bundler
+      ${SNAPCRAFT_PART_INSTALL}/usr/bin/gem cleanup --verbose
+
+      # ccache --show-stats
+    # prime:
+    #   - usr/bin/ruby
+    #   - usr/bin/bundle
+    #   - usr/lib
+    #   - -usr/lib/pkgconfig
+    #   - -usr/lib/ruby/gems/*/doc
+    #   - -usr/lib/ruby/**/*.c
+    #   - -usr/lib/ruby/**/*.h
+    #   - -usr/lib/ruby/**/*.a
+    #   - -usr/lib/ruby/**/*.o
+
+
+  app:
+    plugin: dump
+    # source: app.tar.gz
+    source: .
+    organize:
+      bin/async-issue-360: app/bin/
+    prime: 
+      - app/bin
+
+  bundle:
+    after:
+      - ruby
+    plugin: nil
+    source: bundle.tar.gz
+    # organize:
+    #   Gemfile: app/
+    #   Gemfile.lock: app/
+    # build-packages:
+    #   - autoconf
+    #   - automake
+    #   - git
+    #   - cmake
+    #   - pkg-config
+    #   - libxml2-dev
+    #   - libmbedtls-dev
+      # - ccache
+    # stage-packages:
+    #   - libczmq4
+    #   # - libmbedtls12
+    #   - libmbedtls14
+    # build-environment:
+      # - CCACHE_NOHASHDIR: "true"
+      # - CC: "ccache cc"
+      # - CXX: "ccache c++"
+      # - CFLAGS: "-Os"
+      # - CFLAGS: "-O2"
+    override-build: |
+      env | sort
+      pwd
+      find
+      # snapcraftctl build
+
+      # find $SNAPCRAFT_PART_SRC
+
+      command -v bundle
+      bundle version
+      mkdir -p app
+      cd app
+      mkdir -p $SNAPCRAFT_PART_INSTALL/app
+      cd $SNAPCRAFT_PART_INSTALL/app
+      cp $SNAPCRAFT_PART_SRC/Gemfile .
+      cp $SNAPCRAFT_PART_SRC/Gemfile.lock .
+
+      bundle config set --local deployment true
+      bundle config set --local cache_path $SNAPCRAFT_PART_SRC/vendor/cache
+      bundle config set --local silence_root_warning true
+      bundle config set --local jobs $SNAPCRAFT_PARALLEL_BUILD_COUNT
+      bundle env
+
+      find $SNAPCRAFT_PART_SRC
+
+      if bundle check
+      then
+        echo "Bundle is already installed."
+      else
+        echo "Installing bundle ..."
+        bundle install --local
+        bundle check
+      fi
+
+      find 
+    # prime:
+    #   - -usr/include
+    #   - -usr/share
+    #   - -vendor/cache/
+    #   - -app/vendor/bundle/**/*.gem
+    #   # - -app/vendor/bundle/**/*.gemspec
+    #   - -app/vendor/bundle/**/CMakeFiles/
+    #   - -app/vendor/bundle/**/*.a
+    #   - -app/vendor/bundle/**/*.c
+    #   - -app/vendor/bundle/**/*.h
+    #   - -app/vendor/bundle/**/*.o
+    #   - -app/vendor/bundle/**/doc/
+    #   - -app/vendor/bundle/**/test/
+    #   - -app/vendor/bundle/**/spec/
+    #   - -app/vendor/bundle/**/features/
+    #   - -app/vendor/bundle/**/concourse/
+
+
+apps:
+  async-issue-360:
+    command: usr/bin/bundle exec $SNAP/app/bin/async-issue-360
+    plugs:
+      # NOTE: plug 'network' seems to be required to avoid:
+      #   bundler: failed to load command: /snap/async-issue-360/x7/app/bin/async-issue-360 (/snap/async-issue-360/x7/app/bin/async-issue-360)
+      #   /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:970:in `initialize': Permission denied @ rb_sysopen - /etc/resolv.conf (Errno::EACCES)
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:970:in `open'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:970:in `parse_resolv_conf'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:999:in `default_config_hash'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:88:in `initialize'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:3371:in `new'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:3371:in `<class:Resolv>'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/resolv.rb:38:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/bundled_gems.rb:69:in `require'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/bundled_gems.rb:69:in `block (2 levels) in replace_require'
+      #           from /snap/async-issue-360/x7/app/vendor/bundle/ruby/3.3.0/gems/async-2.21.0/lib/async/scheduler.rb:14:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/app/vendor/bundle/ruby/3.3.0/gems/async-2.21.0/lib/async/reactor.rb:8:in `require_relative'
+      #           from /snap/async-issue-360/x7/app/vendor/bundle/ruby/3.3.0/gems/async-2.21.0/lib/async/reactor.rb:8:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/app/vendor/bundle/ruby/3.3.0/gems/async-2.21.0/lib/async.rb:8:in `require_relative'
+      #           from /snap/async-issue-360/x7/app/vendor/bundle/ruby/3.3.0/gems/async-2.21.0/lib/async.rb:8:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/bundled_gems.rb:69:in `require'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/3.3.0/bundled_gems.rb:69:in `block (2 levels) in replace_require'
+      #           from /snap/async-issue-360/x7/app/bin/async-issue-360:3:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli/exec.rb:58:in `load'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli/exec.rb:58:in `kernel_load'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli/exec.rb:23:in `run'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli.rb:456:in `exec'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/vendor/thor/lib/thor/command.rb:28:in `run'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/vendor/thor/lib/thor/invocation.rb:127:in `invoke_command'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/vendor/thor/lib/thor.rb:527:in `dispatch'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli.rb:35:in `dispatch'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/vendor/thor/lib/thor/base.rb:584:in `start'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/cli.rb:29:in `start'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/exe/bundle:28:in `block in <top (required)>'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/lib/bundler/friendly_errors.rb:117:in `with_friendly_errors'
+      #           from /snap/async-issue-360/x7/usr/lib/ruby/gems/3.3.0/gems/bundler-2.5.23/exe/bundle:20:in `<top (required)>'
+      #           from /snap/async-issue-360/x7/usr/bin/bundle:25:in `load'
+      #           from /snap/async-issue-360/x7/usr/bin/bundle:25:in `<main>'
+      - network
+      # - network-bind
+    environment:
+      BUNDLE_GEMFILE: $SNAP/app/Gemfile
+      BUNDLE_PATH: $SNAP/app/vendor/bundle
+      GEM_HOME: $SNAP/usr/lib/ruby/gems/3.3.0/
+      # LIBZMQ_PATH: $SNAP/usr/local/lib
+      # LIBCZMQ_PATH: $SNAP/usr/local/lib
