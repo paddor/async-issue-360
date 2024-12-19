@@ -3,8 +3,9 @@ name: async-issue-360
 base: core22
 version: '0.1.0'
 summary: Reproduction for socetry/async#360
+summary: Reproduction for socketry/async#360
 description: |
-  Reproduction for socetry/async#360
+  Reproduction for socketry/async#360
 
 grade: stable
 confinement: strict
